@@ -118,7 +118,7 @@ get_my_config() {
 
   git clone "$MY_GITHUB/dotfiles.git" /opt/dotfiles
   cd /opt/
-  cp -r dotfiles/.config/*/!(*.md) "$USERNAME/.config/"
+  cp -r dotfiles/.config/*/ "$USERNAME/.config/"
   cp -r dotfiles/.zshrc "$USERNAME"
   cp -r dotfiles/.xprofile "$USERNAME"
   cp -r dotfiles/zsh_plugins/* /usr/share/
@@ -132,12 +132,18 @@ get_my_config() {
         Exec=/usr/lib/notification-daemon-1.0/notification-daemon" >> /usr/share/dbus-1/services/org.freedesktop.Notifications.service
 }
 
-is_mounted() { findmnt "$1" >/dev/null }
+is_mounted() { 
+  findmnt "$1" >/dev/null 
+}
 
-refresh_key() { pacman-key --refresh-keys }
+refresh_key() { 
+  pacman-key --refresh-keys 
+}
 
-echo -e "GET http://archlinux.org HTTP/1.0\n\n" | nc archlinux.org 80 > /dev/null 2>&1
-[[ $? == 1 ]] && panic "There is no Internet conection . . . Can't continue" || message "Internet connection"
+test_conexion(){
+  echo -e "GET http://archlinux.org HTTP/1.0\n\n" | nc archlinux.org 80 > /dev/null 2>&1
+  [[ $? == 1 ]] && panic "There is no Internet conection . . . Can't continue" || message "Internet connection"
+}
 
 # DEFAULT VALUES
 TIME_ZONE="America/Montevideo"
@@ -153,8 +159,7 @@ PACKAGES="base base-devel linux linux-firmware linux-headers grub efibootmgr net
   xorg-xinit git ranger pcmanfm glib2 gvfs unzip zip xcb-util-cursor lxappearance kvantum-qt5 lightdm-webkit2-greeter\
   dhcpcd netctl wpa_supplicant dialog xf86-input-synaptics geeqie vlc firefox alacritty redshift scrot\
   ntfs-3g networkmanager gvfs gvfs-afc gvfs-mtp xdg-user-dirs network-manager-applet bluez bluez-utils \
-  feh lightdm lightdm-gtk-greeter ttf-dejavu ttf-liberation noto-fonts pulseaudio pavucontrol udiskie ntfs-3g libnotify notification-daemon\
-  "
+  feh lightdm lightdm-gtk-greeter ttf-dejavu ttf-liberation noto-fonts pulseaudio pavucontrol udiskie ntfs-3g libnotify notification-daemon"
 INSPIRON=false
 MY_CONFIG=false
 
@@ -216,9 +221,9 @@ while [[ $# -gt 0 ]]; do
       shift
     ;;
   -h|--help)
-    echo "-b boot-name \n
-          -c my config \n
-          --inspiron \n
+    echo "-b boot-name
+          -c my config
+          --inspiron
           -r refrech key"
     exit 0
     ;;
@@ -228,6 +233,8 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+test_conexion
 
 pacman -Sy
 
