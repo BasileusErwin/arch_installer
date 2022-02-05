@@ -1,0 +1,187 @@
+#!/bin/bash
+
+MY_GITHUB="https://github.com/KaiserErwin"
+
+# Colors
+RED="\033[0;31m"
+GREEN="\033[0;32m"
+YELLOW="\033[0;33m"
+NORMAL="\033[0m"
+BLUE="\033[0;34m"
+
+# TODO: Cambiar mensages de error o panic
+warn() {
+  echo -e "${YELLOW}-> Warning:${NORMAL} $1" >&2
+}
+
+error() {
+  echo -e "${RED}==> Error:${NORMAL} $1" >&2
+}
+
+panic() {
+  echo -e "${RED}==> Panic:${NORMAL} $1" >&2
+  exit 1
+}
+
+message() {
+  echo -e "${BLUE}==> Info:${NORMAL} $1"
+}
+
+question() {
+  echo -e "${GREEN}==> Questions:${NORMAL} $1"
+}
+
+# Functions
+program_exists() {
+    command -v $1 &> /dev/null
+}
+
+command_success() {
+  if [[ $1 == 1 ]]; then
+    error $2
+
+    question "Do you want to continue?"
+    read -p "-> Yes/No: " OPTION
+
+    if [[ ${OPTION,,} == "yes" ]] || [[ $OPTION == "" ]]; then
+        warn "Continuing . . . $3"
+        return 0
+    fi
+    panic $2
+  fi
+}
+
+is_mounted() { 
+  findmnt "$1" >/dev/null 
+}
+
+refresh_key() { 
+  pacman-key --refresh-keys 
+}
+
+test_conexion(){
+  echo -e "GET http://archlinux.org HTTP/1.0\n\n" | nc archlinux.org 80 > /dev/null 2>&1
+  [[ $? == 1 ]] && panic "There is no Internet conection . . . Can't continue" || message "Internet connection"
+}
+
+# DEFAULT VALUES
+TIME_ZONE="America/Montevideo"
+USERNAME="user"
+EFI="/boot/efi"
+BOOT_NAME="Arch Linux"
+MOUNT="/mnt"
+LANG="es_UY"
+KEYMAP="en"
+HOSTNAME="ArchLinux"
+REFRESH_KEY=false
+PACKAGES="base base-devel linux linux-firmware linux-headers grub efibootmgr networkmanager git os-probes \
+  xorg-xinit git ranger pcmanfm glib2 gvfs unzip zip xcb-util-cursor lxappearance kvantum-qt5 lightdm-webkit2-greeter\
+  dhcpcd netctl wpa_supplicant dialog xf86-input-synaptics geeqie vlc firefox alacritty redshift scrot\
+  ntfs-3g networkmanager gvfs gvfs-afc gvfs-mtp xdg-user-dirs network-manager-applet bluez bluez-utils \
+  feh lightdm lightdm-gtk-greeter ttf-dejavu ttf-liberation noto-fonts pulseaudio pavucontrol udiskie ntfs-3g libnotify notification-daemon"
+INSPIRON=false
+MY_CONFIG=false
+SHELL="bash"
+
+POSITIONAL=()
+while [[ $# -gt 0 ]]; do
+  KEY="$1"
+
+  case $KEY in
+    -m|--mount)
+      is_mounted "$2" && MOUNT="$2" || panic "Device ROOT is not mounted"
+      shift
+      shift
+    ;;
+    -t|--time)
+      [[ "$2" != "" ]] && TIME_ZONE="$2" || panic "Time Zone not null"
+      shift
+      shift
+    ;;
+    -l|--lang)
+      [[ "$2" != "" ]] && LANG="$2" || panic "Lang not null"
+      shift
+      shift
+      shift
+    ;;
+    -k|--keymap)
+      [[ "$2" != "" ]] && KEYMAP="$2" || panic "Keymap not null"
+      shift
+      shift
+    ;;
+    -H|--hostname)
+      [[ "$2" != "" ]] && HOSTNAME="$2" || panic "Hostname not null"
+      shift
+      shift
+    ;;
+    -e|--efi)
+      is_mounted "$2" && EFI="$2" || panic "Device EFI is not mounted"
+      shift
+      shift
+    ;;
+    -r|--refresh-keys)
+      REFRESH_KEY=true
+      shift
+      shift
+    ;;
+    --inspiron)
+      INSPIRON=true
+      shift
+      shift
+    ;;
+    -b|--boot-name)
+      [[ "$2" != "" ]] && BOOT_NAME="$2" || panic "Lang not null"
+      shift
+      shift
+    ;;
+    -c|--my-config)
+      MY_CONFIG=true
+      shift
+      shift
+    ;;
+    -u|--username)
+      [[ "$2" != "" ]] && USERNAME="$2" || panic "Username not null"
+      shift
+      shift
+    ;;
+    -s|--shell)
+      [[ "$2" != "" ]] && SHELL="$2" || panic "Shell not null"
+      shift
+      shift
+    ;;
+    -h|--help)
+      echo "-b boot-name
+            -c my config
+            --inspiron
+            -r refrech key"
+      exit 0
+    ;;
+    *)
+      POSITIONAL+=("$1") # save it in an array for later
+      shift # past argument
+      ;;
+  esac
+done
+
+test_conexion
+
+pacman -Sy
+command_success $? "" ""
+
+if [[ $REFRESH_KEY == true ]]; then
+  refresh_key
+  command_success $? "" ""
+fi
+
+message "Installing ${PACKAGES}"
+sleep 2
+pacstrap $MOUNT $PACKAGES
+command_success $? "" ""
+
+genfstab -pU $MOUNT >> $MOUNT/etc/fstab
+command_success $? "Could not create fstab" "Could not create fstab"
+
+arch-chroot $MOUNT -c "sh ./chroot -s $SHELL -t $TIME_ZONE -l $LANG -k $KEYMAP -H $HOSTNAME -e $EFI --inspiron $INSPIRON -b BOOT_NAME -c $MY_CONFIG -u $USERNAME"
+if [[ $? == 1 ]]; then
+  fatal "The chroot could not be executed"
+fi

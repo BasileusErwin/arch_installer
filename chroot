@@ -1,6 +1,17 @@
 #!/bin/bash
 
-MY_GITHUB="https://github.com/KaiserErwin"
+MY_REPO_GITHUB_URL="https://github.com/KaiserErwin"
+
+TIME_ZONE="America/Montevideo"
+USERNAME="user"
+EFI="/boot/efi"
+BOOT_NAME="Arch Linux"
+LANG="es_UY"
+KEYMAP="en"
+HOSTNAME="ArchLinux"
+INSPIRON=false
+MY_CONFIG=false
+SHELL="bash"
 
 # Colors
 RED="\033[0;31m"
@@ -51,6 +62,21 @@ command_success() {
   fi
 }
 
+get_aur() {
+  git clone https://aur.archlinux.org/$1.git $MOUNT/opt/$1
+  cd /opt/$1
+  makepkg -si
+}
+
+test_conexion(){
+  echo -e "GET http://archlinux.org HTTP/1.0\n\n" | nc archlinux.org 80 > /dev/null 2>&1
+  [[ $? == 1 ]] && panic "There is no Internet conection . . . Can't continue" || message "Internet connection"
+}
+
+is_mounted() { 
+  findmnt "$1" >/dev/null 
+}
+
 config_to_dell_instpiron() {
   echo "options snd-intel-dspcfg dsp_driver=1 \
         options snd-hda-intel dmic_detect=0 \
@@ -79,15 +105,51 @@ create_user(){
   fi
 }
 
-get_aur() {
-  git clone https://aur.archlinux.org/$1.git /opt/$1
-  cd /opt/$1
-  makepkg -si
+get_my_config() {
+  PACKAGES_TO_INSTALL="$SHELL neovim git bspwm sxhkd rofi nodejs npm python python-pip ruby rubygems xsel fzf ripgrep fd prettier pacman-contrib brightnessctl pamixer upower"
+  AUR_PACKAGES_TO_INSTALL="lightdm-webkit2-theme-glorious stacer brave-bin brave-beta-bin nerd-fonts-ubuntu-mono nerd-fonts-jetbrains-mono nerd-fonts-liberation-mono eslint standard cmake-language-server vscode-json-languageserver"   
+
+  pacman -Sy --noconfirm $PACKAGES_TO_INSTALL
+  command_success $? "" ""
+  sed -i 's/^\(#?greeter\)-session\s*=\s*\(.*\)/greeter-session = lightdm-webkit2-greeter #\1/ #\2g' /etc/lightdm/lightdm.conf
+  sed -i 's/^webkit_theme\s*=\s*\(.*\)/webkit_theme = glorious #\1/g' /etc/lightdm/lightdm-webkit2-greeter.conf
+  sed -i 's/^debug_mode\s*=\s*\(.*\)/debug_mode = true #\1/g' /etc/lightdm/lightdm-webkit2-greeter.conf
+
+  get_aur "paru"
+
+  paru --noconfirm $AUR_PACKAGES_TO_INSTALL
+  command_success $? "" ""
+ 
+  pip install neovim
+  gem install neovim
+  npm i -g neovim
+
+  chsh -s /bin/$SHELL $USERNAME
+
+  git clone "$MY_GITHUB/dotfiles.git" /home/$USERNAME/dotfiles
+  cd /home/$USERNAME/
+
+  message "Copying files in HOME from $USERNAME"
+  cp -r dotfiles/.config/*/ "/home/$USERNAME"
+  cp -r dotfiles/.zshrc "/home/$USERNAME"
+  cp -r dotfiles/.xprofile "/home/$USERNAME"
+  cp -r dotfiles/zsh_plugins/* /usr/share/
+  cp dotfiles/.local/bin/percentage /home/$USERNAME/.local/bin/
+  cp dotfiles/.local/bin/battery /home/$USERNAME/.local/bin/
+  cp dotfiles/.local/bin/brightness /home/$USERNAME/.local/bin/
+  cp dotfiles/.local/bin/volume /home/$USERNAME/.local/bin/
+
+  message "Moved the dotfiles directory in Home with the name .dotfiles"
+  mv dotfiles /home/$USERNAME/.dotfiles
+
+  echo "[D-BUS Service] \
+        Name=org.freedesktop.Notifications \
+        Exec=/usr/lib/notification-daemon-1.0/notification-daemon" >> /usr/share/dbus-1/services/org.freedesktop.Notifications.service
 }
 
 grub() {
   message "Grub install"
-  grub-install --efi-directory=$EFI --bootloader-id=$BOOT_NAME --target=x86_64-efi
+  grub-install --efi-directory="$MOUNT/$EFI" --bootloader-id=$BOOT_NAME --target=x86_64-efi
   command_success $? "The grub could not be installed" "Grub not installed"
 
   message "Grub config"
@@ -100,108 +162,39 @@ grub() {
   command_success $? "Could not configure grub" "Grub not config"
 }
 
-get_my_config() {
-  PACKAGES_TO_INSTALL="neovim bspwm sxhkd rofi nodejs npm python python-pip ruby rubygems xsel fzf ripgrep fd prettier pacman-contrib brightnessctl pamixer upower zsh"
-  AUR_PACKAGES_TO_INSTALL="lightdm-webkit-theme-aether brave nerd-fonts-ubuntu-mono nerd-fonts-jetbrains-mono nerd-fonts-liberation-mono eslint standard cmake-language-server vscode-json-languageserver"   
-
-  pacman -Sy --noconfirm $PACKAGES_TO_INSTALL
-
-  get_aur "paru"
-
-  paru --noconfirm $AUR_PACKAGES_TO_INSTALL
- 
-  pip install neovim
-  gem install neovim
-  npm i -g neovim
-
-  chsh -s /bin/zsh $USERNAME
-
-  git clone "$MY_GITHUB/dotfiles.git" /opt/dotfiles
-  cd /opt/
-  cp -r dotfiles/.config/*/ "$USERNAME/.config/"
-  cp -r dotfiles/.zshrc "$USERNAME"
-  cp -r dotfiles/.xprofile "$USERNAME"
-  cp -r dotfiles/zsh_plugins/* /usr/share/
-  cp dotfiles/.local/bin/percentage ~/.local/bin/
-  cp dotfiles/.local/bin/battery ~/.local/bin/
-  cp dotfiles/.local/bin/brightness ~/.local/bin/
-  cp dotfiles/.local/bin/volume ~/.local/bin/
-
-  echo "[D-BUS Service] \
-        Name=org.freedesktop.Notifications \
-        Exec=/usr/lib/notification-daemon-1.0/notification-daemon" >> /usr/share/dbus-1/services/org.freedesktop.Notifications.service
-}
-
-is_mounted() { 
-  findmnt "$1" >/dev/null 
-}
-
-refresh_key() { 
-  pacman-key --refresh-keys 
-}
-
-test_conexion(){
-  echo -e "GET http://archlinux.org HTTP/1.0\n\n" | nc archlinux.org 80 > /dev/null 2>&1
-  [[ $? == 1 ]] && panic "There is no Internet conection . . . Can't continue" || message "Internet connection"
-}
-
-# DEFAULT VALUES
-TIME_ZONE="America/Montevideo"
-USERNAME=""
-EFI="/boot/efi"
-BOOT_NAME="Arch Linux"
-MOUNT="/mnt"
-LANG="es_UY"
-KEYMAP="en"
-HOSTNAME="ArchLinux"
-REFRESH_KEY=false
-PACKAGES="base base-devel linux linux-firmware linux-headers grub efibootmgr networkmanager git os-probes \
-  xorg-xinit git ranger pcmanfm glib2 gvfs unzip zip xcb-util-cursor lxappearance kvantum-qt5 lightdm-webkit2-greeter\
-  dhcpcd netctl wpa_supplicant dialog xf86-input-synaptics geeqie vlc firefox alacritty redshift scrot\
-  ntfs-3g networkmanager gvfs gvfs-afc gvfs-mtp xdg-user-dirs network-manager-applet bluez bluez-utils \
-  feh lightdm lightdm-gtk-greeter ttf-dejavu ttf-liberation noto-fonts pulseaudio pavucontrol udiskie ntfs-3g libnotify notification-daemon"
-INSPIRON=false
-MY_CONFIG=false
-
 POSITIONAL=()
 while [[ $# -gt 0 ]]; do
   KEY="$1"
 
   case $KEY in
-    -m|--mount)
-      is_mounted "$2" && MOUNT="$2" || panic "Device ROOT is not mounted"
-      shift
-      shift
-    ;;
+    -s|--shell)
+        SHELL="$2"
+        shift
+        shift
+      ;;
     -t|--time)
-      [[ "$2" != "" ]] && TIME_ZONE="$2" || panic "Time Zone not null"
+      TIME_ZONE="$2"
       shift
       shift
     ;;
     -l|--lang)
       LANG="$2"
-      [[ "$2" != "" ]] && LANG="$2" || panic "Lang not null"
       shift
       shift
       shift
     ;;
     -k|--keymap)
-      [[ "$2" != "" ]] && KEYMAP="$2" || panic "Keymap not null"
+      KEYMAP="$2"
       shift
       shift
     ;;
     -H|--hostname)
-      [[ "$2" != "" ]] && HOSTNAME="$2" || panic "Hostname not null"
+      HOSTNAME="$2"
       shift
       shift
     ;;
     -e|--efi)
       is_mounted "$2" && EFI="$2" || panic "Device EFI is not mounted"
-      shift
-      shift
-    ;;
-    -r|--refresh-keys)
-      REFRESH_KEY=true
       shift
       shift
     ;;
@@ -220,12 +213,10 @@ while [[ $# -gt 0 ]]; do
       shift
       shift
     ;;
-  -h|--help)
-    echo "-b boot-name
-          -c my config
-          --inspiron
-          -r refrech key"
-    exit 0
+    -u|--username)
+      USERNAME="$2"
+      shift
+      shift
     ;;
     *)
       POSITIONAL+=("$1") # save it in an array for later
@@ -235,25 +226,6 @@ while [[ $# -gt 0 ]]; do
 done
 
 test_conexion
-
-pacman -Sy
-
-if [[ $REFRESH_KEY ]]; then
-  refresh_key
-fi
-
-message "Installing ${PACKAGES}"
-sleep 2
-pacstrap $MOUNT $PACKAGES
-command_success $? "" ""
-
-genfstab -pU $MOUNT >> $MOUNT/etc/fstab
-command_success $? "Could not create fstab" "Could not create fstab"
-
-arch-chroot $MOUNT
-if [[ $? == 1 ]]; then
-  fatal "The chroot could not be executed"
-fi
 
 message "Set zonetime"
 ln -sf /usr/share/zoneinfo/$TIME_ZONE /etc/localtime
@@ -279,12 +251,14 @@ command_success $? "" ""
 
 fc-list
 
-if [[ $INSPIRON ]]; then
+if [[ $INSPIRON == true ]]; then
  config_to_dell_instpiron
 fi
 
 create_user
 
-if [[ $MY_CONFIG ]]; then
+if [[ $MY_CONFIG == true ]]; then
   get_my_config
 fi
+
+grub
